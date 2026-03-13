@@ -1,0 +1,89 @@
+<mujoco model="two_axis_gimbal_clean">
+    <compiler angle="radian"/>
+    <option timestep="0.01" gravity="0 0 -9.81"/>
+
+    <default>
+        <joint damping="0.3" armature="0.01" limited="true"/>
+        <geom rgba="0.7 0.7 0.7 1"/>
+        <motor ctrllimited="true" ctrlrange="-1 1"/>
+    </default>
+
+    <worldbody>
+        <!-- 地面 -->
+        <geom name="ground" type="plane" size="2 2 0.1" rgba="0.95 0.95 0.95 1"/>
+        <!-- 底座 -->
+        <body name="base" pos="0 0 0.05">
+            <joint name="slide_x" type="slide" axis="1 0 0" range="-1.5 1.5" damping="5" armature="0.1"/>
+            <joint name="slide_y" type="slide" axis="0 1 0" range="-1.5 1.5" damping="5" armature="0.1"/>
+            <geom name="base_geom" type="box" size="0.06 0.06 0.03" rgba="0.15 0.15 0.15 1"/>
+            <!-- yaw轴：在底座中心 -->
+            <body name="yaw_body" pos="0 0 0.03">
+                <joint name="yaw_joint" type="hinge" axis="0 0 1" range="-3.1416 3.1416"/>
+                <!-- 中心立柱 -->
+                <geom name="yaw_column" type="cylinder" pos="0 0 0.03" size="0.012 0.03" rgba="0.45 0.45 0.45 1"/>
+                <!-- pitch轴：也在中心附近 -->
+                <body name="pitch_body" pos="0 0 0.06">
+                    <joint name="pitch_joint" type="hinge" axis="0 -1 0" range="0 1.5708"/>
+                    <!-- pitch轴横杆 -->
+                    <geom name="pitch_axis_bar" type="capsule"
+                          fromto="0 -0.045 0 0 0.045 0"
+                          size="0.008"
+                          rgba="0.15 0.35 0.85 1"/>
+                    <!-- 相机支臂 -->
+                    <geom name="camera_arm" type="capsule"
+                          fromto="0 0 0 0.12 0 0"
+                          size="0.01"
+                          rgba="0.7 0.7 0.7 1"/>
+                    <!-- 相机本体 -->
+                    <body name="camera_body" pos="0.12 0 0">
+                        <geom name="camera_box" type="box"
+                              size="0.03 0.02 0.02"
+                              rgba="0.7 0.15 0.15 1"/>
+                        <!-- 镜头 -->
+                        <geom name="camera_lens" type="cylinder"
+                              pos="0.035 0 0"
+                              size="0.009 0.015"
+                              euler="0 1.5708 0"
+                              rgba="0.08 0.08 0.08 1"/>
+                        <!-- 机载相机（沿 +x 朝前，放在镜头前方） -->
+                        <camera name="turret_cam" pos="0.06 0 0" xyaxes="0 -1 0 0 0 1" fovy="60"/>
+                        <!-- 前端标记 -->
+                        <site name="tip" pos="0.05 0 0" size="0.006" rgba="1 0 0 1"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+
+        <!-- 靶子 -->
+        <body name="target" pos="0.5 0 0.28">
+            <!-- 支架（从地面到靶底） -->
+            <geom name="target_stand" type="capsule"
+                  fromto="0 0 -0.28  0 0 -0.13"
+                  size="0.008"
+                  rgba="0.3 0.3 0.3 1"/>
+            <!-- 靶面：13层圆盘叠加 = 6红环 + 6白间隔 + 红靶心 -->
+            <geom name="ring_r1" type="cylinder" euler="0 1.5708 0" size="0.13 0.001" pos="-0.001 0 0"  rgba="0.9 0.1 0.1 1" contype="0" conaffinity="0"/>
+            <geom name="ring_w1" type="cylinder" euler="0 1.5708 0" size="0.12 0.001" pos="-0.002 0 0"  rgba="1 1 1 1"       contype="0" conaffinity="0"/>
+            <geom name="ring_r2" type="cylinder" euler="0 1.5708 0" size="0.11 0.001" pos="-0.003 0 0"  rgba="0.9 0.1 0.1 1" contype="0" conaffinity="0"/>
+            <geom name="ring_w2" type="cylinder" euler="0 1.5708 0" size="0.10 0.001" pos="-0.004 0 0"  rgba="1 1 1 1"       contype="0" conaffinity="0"/>
+            <geom name="ring_r3" type="cylinder" euler="0 1.5708 0" size="0.09 0.001" pos="-0.005 0 0"  rgba="0.9 0.1 0.1 1" contype="0" conaffinity="0"/>
+            <geom name="ring_w3" type="cylinder" euler="0 1.5708 0" size="0.08 0.001" pos="-0.006 0 0"  rgba="1 1 1 1"       contype="0" conaffinity="0"/>
+            <geom name="ring_r4" type="cylinder" euler="0 1.5708 0" size="0.07 0.001" pos="-0.007 0 0"  rgba="0.9 0.1 0.1 1" contype="0" conaffinity="0"/>
+            <geom name="ring_w4" type="cylinder" euler="0 1.5708 0" size="0.06 0.001" pos="-0.008 0 0"  rgba="1 1 1 1"       contype="0" conaffinity="0"/>
+            <geom name="ring_r5" type="cylinder" euler="0 1.5708 0" size="0.05 0.001" pos="-0.009 0 0"  rgba="0.9 0.1 0.1 1" contype="0" conaffinity="0"/>
+            <geom name="ring_w5" type="cylinder" euler="0 1.5708 0" size="0.04 0.001" pos="-0.010 0 0"  rgba="1 1 1 1"       contype="0" conaffinity="0"/>
+            <geom name="ring_r6" type="cylinder" euler="0 1.5708 0" size="0.03 0.001" pos="-0.011 0 0"  rgba="0.9 0.1 0.1 1" contype="0" conaffinity="0"/>
+            <geom name="ring_w6" type="cylinder" euler="0 1.5708 0" size="0.02 0.001" pos="-0.012 0 0"  rgba="1 1 1 1"       contype="0" conaffinity="0"/>
+            <geom name="bullseye" type="cylinder" euler="0 1.5708 0" size="0.01 0.001" pos="-0.013 0 0"  rgba="0.9 0.1 0.1 1" contype="0" conaffinity="0"/>
+            <!-- 靶心标记点 -->
+            <site name="bullseye_center" pos="0 0 0" size="0.003" rgba="0 0 0 0"/>
+        </body>
+    </worldbody>
+
+    <actuator>
+        <motor name="slide_x_motor" joint="slide_x" gear="5" ctrllimited="true" ctrlrange="-1 1"/>
+        <motor name="slide_y_motor" joint="slide_y" gear="5" ctrllimited="true" ctrlrange="-1 1"/>
+        <motor name="yaw_motor" joint="yaw_joint" gear="1"/>
+        <motor name="pitch_motor" joint="pitch_joint" gear="1"/>
+    </actuator>
+</mujoco>
