@@ -1,0 +1,29 @@
+[project]
+name = "lockon"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "migo",email = "1695587905@qq.com"}
+]
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "opencv-python (>=4.13.0.92,<5.0.0.0)",
+    "numpy (<2.3)",
+    "imageio (>=2.37.3,<3.0.0)",
+    "tqdm (>=4.67.3,<5.0.0)",
+    "mujoco (>=3.6.0,<4.0.0)",
+    "pillow (>=12.1.1,<13.0.0)"
+]
+
+[tool.poetry]
+packages = [{include = "lockon", from = "src"}]
+
+[[tool.poetry.source]]
+name = "tuna"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+priority = "primary"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
