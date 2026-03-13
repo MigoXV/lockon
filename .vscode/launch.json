@@ -5,6 +5,14 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "grpc app",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "lockon.commands.app",
+            "console": "integratedTerminal",
+            "envFile": "${workspaceFolder}/.env"
+        },
+        {
             "name": "Python 调试程序: 当前文件",
             "type": "debugpy",
             "request": "launch",

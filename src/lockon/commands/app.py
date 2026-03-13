@@ -63,9 +63,24 @@ def turret_server(
         envvar="LOCKON_TURRET_H264_GOP",
         help="H.264 GOP/keyframe interval in frames.",
     ),
+    show_mujoco_viewer: bool = typer.Option(
+        False,
+        "--show-mujoco-viewer",
+        envvar="LOCKON_TURRET_SHOW_MUJOCO_VIEWER",
+        help="Show a live MuJoCo viewer synced to the turret server state.",
+    ),
 ) -> None:
-    from lockon.servicers.turret import serve
+    from lockon.servicers.turret import create_servicer, serve
 
+    servicer = create_servicer(
+        camera_width=camera_width,
+        camera_height=camera_height,
+        camera_fovy_deg=camera_fovy,
+        observation_format=observation_format.value,
+        jpeg_quality=jpeg_quality,
+        h264_bitrate_kbps=h264_bitrate_kbps,
+        h264_gop=h264_gop,
+    )
     server = serve(
         host=host,
         port=port,
@@ -76,12 +91,32 @@ def turret_server(
         jpeg_quality=jpeg_quality,
         h264_bitrate_kbps=h264_bitrate_kbps,
         h264_gop=h264_gop,
+        servicer=servicer,
     )
     typer.echo(
         f"Turret gRPC server listening on {host}:{port} "
         f"({observation_format.value}, {camera_width}x{camera_height}, fovy={camera_fovy})"
     )
-    server.wait_for_termination()
+    if not show_mujoco_viewer:
+        try:
+            server.wait_for_termination()
+        finally:
+            servicer.close()
+        return
+
+    import time
+
+    import mujoco.viewer
+
+    try:
+        with mujoco.viewer.launch_passive(servicer.env.model, servicer.env.data) as viewer:
+            while viewer.is_running():
+                with servicer._lock:
+                    viewer.sync()
+                time.sleep(servicer.env.dt)
+    finally:
+        server.stop(grace=0)
+        servicer.close()
 
 
 def main() -> None:

@@ -18,7 +18,7 @@ class TurretEnv(gym.Env[np.ndarray, np.ndarray]):
 
     RING_BOUNDARIES = np.array([0.01, 0.03, 0.05, 0.07, 0.09, 0.11, 0.13], dtype=np.float64)
     RING_NAMES = ("靶心(10环)", "9环", "8环", "7环", "6环", "5环", "4环")
-    TARGET_STEP_SCALE = np.array([0.03, 0.03, 0.08, 0.08], dtype=np.float64)
+    TARGET_STEP_SCALE = np.array([0.03, 0.03, 0.05, 0.08, 0.08], dtype=np.float64)
 
     def __init__(
         self,
@@ -41,8 +41,8 @@ class TurretEnv(gym.Env[np.ndarray, np.ndarray]):
         self.camera_height = camera_height
         self.dt = float(self.model.opt.timestep)
 
-        self.qpos_size = 4
-        self.qvel_size = 4
+        self.qpos_size = 5
+        self.qvel_size = 5
         self._initial_qpos = self.data.qpos[: self.qpos_size].copy()
         self.targets = self._initial_qpos.copy()
 
@@ -78,6 +78,9 @@ class TurretEnv(gym.Env[np.ndarray, np.ndarray]):
             self.model.cam_fovy[self.cam_id] = float(camera_fovy_deg)
 
         self.camera_fovy_rad = np.radians(float(self.model.cam_fovy[self.cam_id]))
+        self.camera_fovx_rad = 2.0 * np.arctan(
+            (self.camera_width / self.camera_height) * np.tan(self.camera_fovy_rad / 2.0)
+        )
 
         self.renderer: mujoco.Renderer | None = None
 
@@ -110,8 +113,8 @@ class TurretEnv(gym.Env[np.ndarray, np.ndarray]):
         qpos = self.data.qpos[: self.qpos_size]
         qvel = self.data.qvel[: self.qvel_size]
 
-        kp = np.array([20.0, 20.0, 8.0, 8.0], dtype=np.float64)
-        kd = np.array([5.0, 5.0, 1.5, 1.5], dtype=np.float64)
+        kp = np.array([20.0, 20.0, 6.0, 8.0, 8.0], dtype=np.float64)
+        kd = np.array([5.0, 5.0, 1.2, 1.5, 1.5], dtype=np.float64)
         ctrl = kp * (self.targets - qpos) - kd * qvel
         self.data.ctrl[: self.qpos_size] = np.clip(ctrl, -1.0, 1.0)
 
@@ -140,6 +143,8 @@ class TurretEnv(gym.Env[np.ndarray, np.ndarray]):
             "qvel": self.data.qvel[: self.qvel_size].astype(np.float32).copy(),
             "targets": self.targets.astype(np.float32).copy(),
             "aim_error": self._aim_error(),
+            "camera_fovy_deg": float(np.degrees(self.camera_fovy_rad)),
+            "camera_fovx_deg": float(np.degrees(self.camera_fovx_rad)),
         }
 
     def reset(

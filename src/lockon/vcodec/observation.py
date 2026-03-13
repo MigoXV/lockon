@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 
 from lockon.protos.gym_env import gym_env_pb2
+from lockon.utils import tensor_from_array
 
 try:
     import av
@@ -40,11 +41,6 @@ class ObservationCodecConfig:
     jpeg_quality: int = 80
     h264_bitrate_kbps: int = 4000
     h264_gop: int = 30
-
-
-def _tensor_from_array(array: np.ndarray) -> gym_env_pb2.Tensor:
-    arr = np.asarray(array)
-    return gym_env_pb2.Tensor(data=arr.tobytes(), shape=list(arr.shape), dtype=str(arr.dtype))
 
 
 def _tensor_from_bytes(data: bytes, dtype: str) -> gym_env_pb2.Tensor:
@@ -89,7 +85,7 @@ class RgbObservationEncoder(ObservationEncoder):
     def encode(self, frame_rgb: np.ndarray) -> tuple[gym_env_pb2.Tensor, dict[str, Any]]:
         frame = np.asarray(frame_rgb, dtype=np.uint8)
         height, width = frame.shape[:2]
-        return _tensor_from_array(frame), {
+        return tensor_from_array(frame), {
             "frame_codec": ObservationFormat.RGB.value,
             "width": int(width),
             "height": int(height),
