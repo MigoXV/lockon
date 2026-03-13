@@ -12,22 +12,13 @@ import numpy as np
 from google.protobuf.json_format import MessageToDict
 
 from lockon.protos.gym_env import gym_env_pb2, gym_env_pb2_grpc
+from lockon.utils import array_from_tensor, tensor_from_array
 from lockon.vcodec import create_observation_decoder
 
 DEFAULT_SERVER_ADDR = os.getenv("LOCKON_SERVER_ADDR", "127.0.0.1:50051")
 FRAME_SKIP = 5
 STEP_ACTION = np.zeros(5, dtype=np.float32)
 _STREAM_END = object()
-
-
-def _tensor_from_array(array: np.ndarray) -> gym_env_pb2.Tensor:
-    arr = np.asarray(array)
-    return gym_env_pb2.Tensor(data=arr.tobytes(), shape=list(arr.shape), dtype=str(arr.dtype))
-
-
-def _array_from_tensor(tensor: gym_env_pb2.Tensor) -> np.ndarray:
-    dtype = np.dtype(tensor.dtype)
-    return np.frombuffer(tensor.data, dtype=dtype).reshape(tuple(tensor.shape))
 
 
 def _request_iterator(
@@ -90,16 +81,16 @@ def _send_step(
     action: np.ndarray,
 ) -> dict[str, object]:
     request_queue.put(
-        gym_env_pb2.EnvRequest(step=gym_env_pb2.Step(action=_tensor_from_array(action.astype(np.float32))))
+        gym_env_pb2.EnvRequest(step=gym_env_pb2.Step(action=tensor_from_array(action.astype(np.float32))))
     )
     reply = next(responses)
     if reply.WhichOneof("result") != "step":
         raise RuntimeError("expected StepReply")
 
     info = MessageToDict(reply.step.info, preserving_proto_field_name=True)
-    reward = float(_array_from_tensor(reply.step.reward))
-    terminated = bool(_array_from_tensor(reply.step.terminated))
-    truncated = bool(_array_from_tensor(reply.step.truncated))
+    reward = float(array_from_tensor(reply.step.reward))
+    terminated = bool(array_from_tensor(reply.step.terminated))
+    truncated = bool(array_from_tensor(reply.step.truncated))
     return {
         "observation": reply.step.observation,
         "info": info,

@@ -143,8 +143,8 @@ def process_key(key_code: int) -> None:
     # 按 joint range 限制目标
     yaw_target = clamp(yaw_target, -3.1416, 3.1416)
     pitch_target = clamp(pitch_target, 0.0, 1.5708)
-    x_target = clamp(x_target, -1.5, 1.5)
-    y_target = clamp(y_target, -1.5, 1.5)
+    x_target = clamp(x_target, -0.8, 0.15)
+    y_target = clamp(y_target, -0.75, 0.75)
 
 
 # 离屏渲染器

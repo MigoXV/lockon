@@ -1,40 +1,34 @@
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 from google.protobuf.struct_pb2 import Struct
 
 from lockon.envs.turret import TurretEnv
 from lockon.protos.gym_env import gym_env_pb2
-
-
-def tensor_from_array(array: np.ndarray) -> gym_env_pb2.Tensor:
-    arr = np.asarray(array)
-    return gym_env_pb2.Tensor(data=arr.tobytes(), shape=list(arr.shape), dtype=str(arr.dtype))
+from lockon.utils import array_from_tensor, tensor_from_array
 
 
 def scalar_tensor(value: object, dtype: str) -> gym_env_pb2.Tensor:
     return tensor_from_array(np.asarray(value, dtype=np.dtype(dtype)))
 
 
-def array_from_tensor(tensor: gym_env_pb2.Tensor) -> np.ndarray:
-    try:
-        dtype = np.dtype(tensor.dtype)
-    except TypeError as exc:
-        raise ValueError(f"unsupported tensor dtype: {tensor.dtype}") from exc
-
-    item_count = int(np.prod(tensor.shape, dtype=np.int64)) if tensor.shape else 1
-    expected_size = item_count * dtype.itemsize
-    if len(tensor.data) != expected_size:
-        raise ValueError(
-            f"tensor byte size mismatch: expected {expected_size}, got {len(tensor.data)}"
-        )
-
-    return np.frombuffer(tensor.data, dtype=dtype).reshape(tuple(tensor.shape))
+def _sanitize_struct_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _sanitize_struct_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_sanitize_struct_value(item) for item in value]
+    if isinstance(value, np.generic):
+        value = value.item()
+    if isinstance(value, float) and not np.isfinite(value):
+        return None
+    return value
 
 
 def info_to_struct(info: dict[str, object]) -> Struct:
     payload = Struct()
-    payload.update(info)
+    payload.update(_sanitize_struct_value(info))
     return payload
 
 
@@ -44,6 +38,8 @@ def build_state_info(env: TurretEnv, info: dict[str, object]) -> dict[str, objec
         "qvel": info["qvel"].tolist(),
         "targets": info["targets"].tolist(),
         "aim_error": float(info["aim_error"]),
+        "camera_fovy_deg": float(info["camera_fovy_deg"]),
+        "camera_fovx_deg": float(info["camera_fovx_deg"]),
         "fire": {"triggered": False},
     }
 
