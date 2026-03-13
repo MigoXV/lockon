@@ -25,8 +25,9 @@ class TurretEnv(gym.Env[np.ndarray, np.ndarray]):
         xml_path: str | Path | None = None,
         render_mode: str | None = "rgb_array",
         camera_name: str = "turret_cam",
-        camera_width: int = 320,
-        camera_height: int = 240,
+        camera_width: int = 640,
+        camera_height: int = 480,
+        camera_fovy_deg: float | None = None,
     ) -> None:
         super().__init__()
 
@@ -72,6 +73,10 @@ class TurretEnv(gym.Env[np.ndarray, np.ndarray]):
         self.tip_site_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, "tip")
         self.bullseye_site_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, "bullseye_center")
         self.cam_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, self.camera_name)
+
+        if camera_fovy_deg is not None:
+            self.model.cam_fovy[self.cam_id] = float(camera_fovy_deg)
+
         self.camera_fovy_rad = np.radians(float(self.model.cam_fovy[self.cam_id]))
 
         self.renderer: mujoco.Renderer | None = None

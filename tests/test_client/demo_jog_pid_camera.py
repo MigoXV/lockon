@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import argparse
+import os
 import queue
 import time
 from typing import Iterator
@@ -10,11 +12,10 @@ import numpy as np
 from google.protobuf.json_format import MessageToDict
 
 from lockon.protos.gym_env import gym_env_pb2, gym_env_pb2_grpc
+from lockon.vcodec import create_observation_decoder
 
-SERVER_ADDR = "127.0.0.1:50051"
+DEFAULT_SERVER_ADDR = os.getenv("LOCKON_SERVER_ADDR", "127.0.0.1:50051")
 FRAME_SKIP = 5
-CAM_WIDTH = 320
-CAM_HEIGHT = 240
 STEP_ACTION = np.zeros(5, dtype=np.float32)
 _STREAM_END = object()
 
@@ -66,7 +67,8 @@ def _process_key(key_code: int) -> np.ndarray:
 
 
 def _draw_crosshair(frame: np.ndarray) -> None:
-    cx, cy = CAM_WIDTH // 2, CAM_HEIGHT // 2
+    height, width = frame.shape[:2]
+    cx, cy = width // 2, height // 2
     cross_size = 10
     cv2.line(frame, (cx - cross_size, cy), (cx + cross_size, cy), (0, 255, 0), 1)
     cv2.line(frame, (cx, cy - cross_size), (cx, cy + cross_size), (0, 255, 0), 1)
@@ -94,13 +96,12 @@ def _send_step(
     if reply.WhichOneof("result") != "step":
         raise RuntimeError("expected StepReply")
 
-    observation = _array_from_tensor(reply.step.observation)
     info = MessageToDict(reply.step.info, preserving_proto_field_name=True)
     reward = float(_array_from_tensor(reply.step.reward))
     terminated = bool(_array_from_tensor(reply.step.terminated))
     truncated = bool(_array_from_tensor(reply.step.truncated))
     return {
-        "observation": observation,
+        "observation": reply.step.observation,
         "info": info,
         "reward": reward,
         "terminated": terminated,
@@ -108,10 +109,29 @@ def _send_step(
     }
 
 
-def main() -> None:
-    request_queue: "queue.Queue[gym_env_pb2.EnvRequest | object]" = queue.Queue()
+def _decode_frame(
+    observation: gym_env_pb2.Tensor,
+    info: dict[str, object],
+    decoder,
+) -> tuple[np.ndarray, object]:
+    if decoder is None or getattr(decoder, "tensor_dtype", None) != observation.dtype:
+        if decoder is not None:
+            decoder.close()
+        decoder = create_observation_decoder(observation.dtype)
+        decoder.reset()
 
-    with grpc.insecure_channel(SERVER_ADDR) as channel:
+    return decoder.decode(observation, info), decoder
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--server-addr", default=DEFAULT_SERVER_ADDR)
+    args = parser.parse_args()
+
+    request_queue: "queue.Queue[gym_env_pb2.EnvRequest | object]" = queue.Queue()
+    decoder = None
+
+    with grpc.insecure_channel(args.server_addr) as channel:
         stub = gym_env_pb2_grpc.ArmEnvStub(channel)
         responses = stub.StreamEnv(_request_iterator(request_queue))
 
@@ -120,7 +140,7 @@ def main() -> None:
         if reset_reply.WhichOneof("result") != "reset":
             raise RuntimeError("expected ResetReply")
 
-        frame_rgb = _array_from_tensor(reset_reply.reset.observation)
+        frame_rgb, decoder = _decode_frame(reset_reply.reset.observation, {}, decoder)
         last_info: dict[str, object] = {}
         step_count = 0
 
@@ -129,8 +149,12 @@ def main() -> None:
         try:
             while True:
                 step_result = _send_step(request_queue, responses, STEP_ACTION)
-                frame_rgb = step_result["observation"]
                 last_info = step_result["info"]
+                frame_rgb, decoder = _decode_frame(
+                    step_result["observation"],
+                    last_info,
+                    decoder,
+                )
                 step_count += 1
 
                 if step_count % FRAME_SKIP == 0:
@@ -150,8 +174,12 @@ def main() -> None:
 
                         action = _process_key(key)
                         step_result = _send_step(request_queue, responses, action)
-                        frame_rgb = step_result["observation"]
                         last_info = step_result["info"]
+                        frame_rgb, decoder = _decode_frame(
+                            step_result["observation"],
+                            last_info,
+                            decoder,
+                        )
 
                         fire_info = last_info.get("fire", {})
                         if isinstance(fire_info, dict) and fire_info.get("triggered"):
@@ -169,6 +197,8 @@ def main() -> None:
 
                 time.sleep(0.01)
         finally:
+            if decoder is not None:
+                decoder.close()
             request_queue.put(_STREAM_END)
             cv2.destroyAllWindows()
 

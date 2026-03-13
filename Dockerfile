@@ -5,11 +5,15 @@ WORKDIR /app
 
 # 安装 MuJoCo 离屏渲染依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
     libegl1 \
     libgl1 \
     libgl1-mesa-dri \
     libgles2 \
     libosmesa6 \
+    pkg-config \
+    libavformat-dev libavcodec-dev libavdevice-dev \
+    libavutil-dev libavfilter-dev libswscale-dev libswresample-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 拷贝必要的文件以安装依赖
