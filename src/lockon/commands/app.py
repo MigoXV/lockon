@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import typer
 
-from lockon.servicers.turret import serve
-
 app = typer.Typer(no_args_is_help=True)
 
 
@@ -22,6 +20,8 @@ def turret_server(
         help="Port to bind the turret gRPC server to.",
     ),
 ) -> None:
+    from lockon.servicers.turret import serve
+
     server = serve(host=host, port=port)
     typer.echo(f"Turret gRPC server listening on {host}:{port}")
     server.wait_for_termination()
