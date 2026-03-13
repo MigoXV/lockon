@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package arm_stream;
+
+import "google/protobuf/struct.proto";
+
+service ArmEnv {
+  // 单一的双向流，客户端发命令，服务端回结果。
+  rpc StreamEnv(stream EnvRequest) returns (stream EnvReply);
+}
+
+// ===== 通用张量结构 =====
+message Tensor {
+  bytes data = 1;           // numpy.tobytes() 序列化后的原始字节
+  repeated int64 shape = 2; // 张量维度，例如 [84, 84, 3]
+  string dtype = 3;         // 数据类型，如 "float32", "uint8", "int64"
+}
+
+// ===== 客户端请求 =====
+message EnvRequest {
+  oneof cmd {
+    Reset reset = 1;
+    Step step = 2;
+    Close close = 3;
+  }
+}
+
+// ===== 服务端回复 =====
+message EnvReply {
+  oneof result {
+    ResetReply reset = 1;
+    StepReply step = 2;
+    CloseReply close = 3;
+  }
+}
+
+// ===== Reset =====
+message Reset {
+  repeated int32 seed = 1;
+}
+
+message ResetReply {
+  Tensor observation = 1;
+}
+
+// ===== Step =====
+message Step {
+  Tensor action = 1;
+}
+
+message StepReply {
+  Tensor observation = 1;
+  Tensor reward = 2;
+  Tensor terminated = 3;
+  Tensor truncated = 4;
+  google.protobuf.Struct info = 5;
+}
+
+// ===== Close =====
+message Close {}
+message CloseReply {}
