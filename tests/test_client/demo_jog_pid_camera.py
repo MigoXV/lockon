@@ -17,7 +17,10 @@ from lockon.vcodec import create_observation_decoder
 
 DEFAULT_SERVER_ADDR = os.getenv("LOCKON_SERVER_ADDR", "127.0.0.1:50051")
 FRAME_SKIP = 5
-STEP_ACTION = np.zeros(5, dtype=np.float32)
+ACTION_DIM = 6
+WINDOW_NAME = "Turret Camera"
+FIRE_INDEX = 5
+STEP_ACTION = np.zeros(ACTION_DIM, dtype=np.float32)
 _STREAM_END = object()
 
 
@@ -33,16 +36,16 @@ def _request_iterator(
 
 def _process_key(key_code: int) -> np.ndarray:
     ch = chr(key_code & 0xFF)
-    action = np.zeros(5, dtype=np.float32)
+    action = np.zeros(ACTION_DIM, dtype=np.float32)
 
     if ch == "j":
-        action[2] = 1.0
-    elif ch == "l":
-        action[2] = -1.0
-    elif ch == "i":
         action[3] = 1.0
-    elif ch == "k":
+    elif ch == "l":
         action[3] = -1.0
+    elif ch == "i":
+        action[4] = 1.0
+    elif ch == "k":
+        action[4] = -1.0
     elif ch == "w":
         action[0] = 1.0
     elif ch == "s":
@@ -52,9 +55,21 @@ def _process_key(key_code: int) -> np.ndarray:
     elif ch == "d":
         action[1] = -1.0
     elif ch == "f":
-        action[4] = 1.0
+        action[FIRE_INDEX] = 1.0
+    elif ch == " ":
+        action[FIRE_INDEX] = 1.0
 
     return action
+
+
+def _close_stream(
+    request_queue: "queue.Queue[gym_env_pb2.EnvRequest | object]",
+    responses: Iterator[gym_env_pb2.EnvReply],
+) -> None:
+    request_queue.put(gym_env_pb2.EnvRequest(close=gym_env_pb2.Close()))
+    close_reply = next(responses)
+    if close_reply.WhichOneof("result") != "close":
+        raise RuntimeError("expected CloseReply")
 
 
 def _draw_crosshair(frame: np.ndarray) -> None:
@@ -135,7 +150,7 @@ def main() -> None:
         last_info: dict[str, object] = {}
         step_count = 0
 
-        cv2.namedWindow("Turret Camera", cv2.WINDOW_NORMAL)
+        cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
 
         try:
             while True:
@@ -149,18 +164,19 @@ def main() -> None:
                 step_count += 1
 
                 if step_count % FRAME_SKIP == 0:
+                    if cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) < 1:
+                        _close_stream(request_queue, responses)
+                        break
+
                     frame = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
                     _draw_bullseye(frame, last_info)
                     _draw_crosshair(frame)
-                    cv2.imshow("Turret Camera", frame)
+                    cv2.imshow(WINDOW_NAME, frame)
 
                     key = cv2.waitKey(1)
                     if key != -1:
                         if (key & 0xFF) == 27:
-                            request_queue.put(gym_env_pb2.EnvRequest(close=gym_env_pb2.Close()))
-                            close_reply = next(responses)
-                            if close_reply.WhichOneof("result") != "close":
-                                raise RuntimeError("expected CloseReply")
+                            _close_stream(request_queue, responses)
                             break
 
                         action = _process_key(key)
@@ -194,7 +210,7 @@ def main() -> None:
             cv2.destroyAllWindows()
 
     qpos = last_info.get("qpos", [])
-    if isinstance(qpos, list) and len(qpos) == 4:
+    if isinstance(qpos, list) and len(qpos) >= 4:
         print(f"x={float(qpos[0]):.3f} y={float(qpos[1]):.3f} yaw={float(qpos[2]):.3f} pitch={float(qpos[3]):.3f}")
 
 

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+import platform
 from pathlib import Path
 from typing import Any
 
 import gymnasium as gym
 
-os.environ.setdefault("MUJOCO_GL", "egl")
+if platform.system() == "Linux":
+    os.environ.setdefault("MUJOCO_GL", "egl")
 
 import mujoco
 import numpy as np
