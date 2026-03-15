@@ -38,6 +38,8 @@ def build_state_info(env: TurretEnv, info: dict[str, object]) -> dict[str, objec
         "qvel": info["qvel"].tolist(),
         "targets": info["targets"].tolist(),
         "aim_error": float(info["aim_error"]),
+        "elapsed_steps": int(info["elapsed_steps"]),
+        "max_episode_steps": int(info["max_episode_steps"]),
         "camera_fovy_deg": float(info["camera_fovy_deg"]),
         "camera_fovx_deg": float(info["camera_fovx_deg"]),
         "fire": {"triggered": False},
@@ -47,5 +49,30 @@ def build_state_info(env: TurretEnv, info: dict[str, object]) -> dict[str, objec
     bullseye_pixel = env.world_to_pixel(bullseye_world)
     if bullseye_pixel is not None:
         state_info["bullseye_pixel"] = [int(bullseye_pixel[0]), int(bullseye_pixel[1])]
+
+    return state_info
+
+
+def build_batch_state_info(envs: list[TurretEnv], infos: list[dict[str, object]]) -> dict[str, object]:
+    state_info: dict[str, object] = {
+        "qpos": [info["qpos"].tolist() for info in infos],
+        "qvel": [info["qvel"].tolist() for info in infos],
+        "targets": [info["targets"].tolist() for info in infos],
+        "aim_error": [float(info["aim_error"]) for info in infos],
+        "elapsed_steps": [int(info["elapsed_steps"]) for info in infos],
+        "max_episode_steps": [int(info["max_episode_steps"]) for info in infos],
+        "camera_fovy_deg": [float(info["camera_fovy_deg"]) for info in infos],
+        "camera_fovx_deg": [float(info["camera_fovx_deg"]) for info in infos],
+        "fire": [{"triggered": False} for _ in envs],
+        "bullseye_pixel": [],
+    }
+
+    for env in envs:
+        bullseye_world = env.data.site_xpos[env.bullseye_site_id].copy()
+        bullseye_pixel = env.world_to_pixel(bullseye_world)
+        if bullseye_pixel is None:
+            state_info["bullseye_pixel"].append(None)
+        else:
+            state_info["bullseye_pixel"].append([int(bullseye_pixel[0]), int(bullseye_pixel[1])])
 
     return state_info

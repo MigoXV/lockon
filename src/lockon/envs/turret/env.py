@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,36 @@ import numpy as np
 from gymnasium import spaces
 
 
+@dataclass(frozen=True, slots=True)
+class TurretEnvConfig:
+    xml_path: str | Path | None = None
+    render_mode: str | None = None
+    camera_name: str = "turret_cam"
+    camera_width: int = 640
+    camera_height: int = 480
+    camera_fovy_deg: float | None = None
+    max_episode_steps: int = 200
+    qpos_reset_noise_scale: float | tuple[float, ...] = 0.0
+    target_reset_noise_scale: float | tuple[float, ...] = 0.0
+    terminate_on_hit: bool = False
+    success_tolerance: float = 0.01
+
+    def to_kwargs(self) -> dict[str, object]:
+        return {
+            "xml_path": self.xml_path,
+            "render_mode": self.render_mode,
+            "camera_name": self.camera_name,
+            "camera_width": self.camera_width,
+            "camera_height": self.camera_height,
+            "camera_fovy_deg": self.camera_fovy_deg,
+            "max_episode_steps": self.max_episode_steps,
+            "qpos_reset_noise_scale": self.qpos_reset_noise_scale,
+            "target_reset_noise_scale": self.target_reset_noise_scale,
+            "terminate_on_hit": self.terminate_on_hit,
+            "success_tolerance": self.success_tolerance,
+        }
+
+
 class TurretEnv(gym.Env[np.ndarray, np.ndarray]):
     metadata = {"render_modes": ["rgb_array"], "render_fps": 100}
 
@@ -23,11 +54,16 @@ class TurretEnv(gym.Env[np.ndarray, np.ndarray]):
     def __init__(
         self,
         xml_path: str | Path | None = None,
-        render_mode: str | None = "rgb_array",
+        render_mode: str | None = None,
         camera_name: str = "turret_cam",
         camera_width: int = 640,
         camera_height: int = 480,
         camera_fovy_deg: float | None = None,
+        max_episode_steps: int = 200,
+        qpos_reset_noise_scale: float | tuple[float, ...] = 0.0,
+        target_reset_noise_scale: float | tuple[float, ...] = 0.0,
+        terminate_on_hit: bool = False,
+        success_tolerance: float = 0.01,
     ) -> None:
         super().__init__()
 
@@ -40,6 +76,12 @@ class TurretEnv(gym.Env[np.ndarray, np.ndarray]):
         self.camera_width = camera_width
         self.camera_height = camera_height
         self.dt = float(self.model.opt.timestep)
+        self.max_episode_steps = max_episode_steps
+        self.qpos_reset_noise_scale = qpos_reset_noise_scale
+        self.target_reset_noise_scale = target_reset_noise_scale
+        self.terminate_on_hit = terminate_on_hit
+        self.success_tolerance = float(success_tolerance)
+        self.elapsed_steps = 0
 
         self.qpos_size = 5
         self.qvel_size = 5
@@ -103,6 +145,31 @@ class TurretEnv(gym.Env[np.ndarray, np.ndarray]):
     def _clamp_targets(self) -> None:
         self.targets = np.clip(self.targets, self._position_low, self._position_high)
 
+    def _coerce_reset_scale(
+        self,
+        value: float | tuple[float, ...] | list[float] | np.ndarray,
+        *,
+        name: str,
+    ) -> np.ndarray:
+        scale = np.asarray(value, dtype=np.float64)
+        if scale.ndim == 0:
+            return np.full(self.qpos_size, float(scale), dtype=np.float64)
+        if scale.shape != (self.qpos_size,):
+            raise ValueError(f"{name} must be a scalar or have shape {(self.qpos_size,)}, got {scale.shape}")
+        return scale
+
+    def _coerce_reset_vector(self, value: object, *, name: str) -> np.ndarray:
+        vector = np.asarray(value, dtype=np.float64)
+        if vector.shape != (self.qpos_size,):
+            raise ValueError(f"{name} must have shape {(self.qpos_size,)}, got {vector.shape}")
+        return vector.copy()
+
+    def _sample_reset_noise(self, scale: float | tuple[float, ...] | list[float] | np.ndarray, *, name: str) -> np.ndarray:
+        noise_scale = self._coerce_reset_scale(scale, name=name)
+        if np.all(noise_scale == 0.0):
+            return np.zeros(self.qpos_size, dtype=np.float64)
+        return self.np_random.uniform(-noise_scale, noise_scale).astype(np.float64, copy=False)
+
     def _normalize_action(self, action: np.ndarray) -> np.ndarray:
         action = np.asarray(action, dtype=np.float32)
         if action.shape != (self.qpos_size,):
@@ -145,6 +212,8 @@ class TurretEnv(gym.Env[np.ndarray, np.ndarray]):
             "aim_error": self._aim_error(),
             "camera_fovy_deg": float(np.degrees(self.camera_fovy_rad)),
             "camera_fovx_deg": float(np.degrees(self.camera_fovx_rad)),
+            "elapsed_steps": int(self.elapsed_steps),
+            "max_episode_steps": int(self.max_episode_steps),
         }
 
     def reset(
@@ -156,13 +225,31 @@ class TurretEnv(gym.Env[np.ndarray, np.ndarray]):
         super().reset(seed=seed)
 
         mujoco.mj_resetData(self.model, self.data)
-        self.data.qpos[: self.qpos_size] = self._initial_qpos
         self.data.qvel[: self.qvel_size] = 0.0
+        self.elapsed_steps = 0
 
-        if options and "targets" in options:
-            self.targets = np.asarray(options["targets"], dtype=np.float64).copy()
+        reset_options = options or {}
+
+        if "qpos" in reset_options:
+            qpos = self._coerce_reset_vector(reset_options["qpos"], name="options['qpos']")
+        else:
+            qpos = self._initial_qpos.copy()
+            qpos += self._sample_reset_noise(
+                reset_options.get("qpos_noise_scale", self.qpos_reset_noise_scale),
+                name="qpos_noise_scale",
+            )
+
+        qpos = np.clip(qpos, self._position_low, self._position_high)
+        self.data.qpos[: self.qpos_size] = qpos
+
+        if "targets" in reset_options:
+            self.targets = self._coerce_reset_vector(reset_options["targets"], name="options['targets']")
         else:
             self.targets = self.data.qpos[: self.qpos_size].copy()
+            self.targets += self._sample_reset_noise(
+                reset_options.get("target_noise_scale", self.target_reset_noise_scale),
+                name="target_noise_scale",
+            )
 
         self._clamp_targets()
         mujoco.mj_forward(self.model, self.data)
@@ -174,10 +261,13 @@ class TurretEnv(gym.Env[np.ndarray, np.ndarray]):
         self._clamp_targets()
         self._apply_pd_control()
         mujoco.mj_step(self.model, self.data)
+        self.elapsed_steps += 1
 
         info = self.get_state_info()
         reward = -info["aim_error"] if np.isfinite(info["aim_error"]) else -10.0
-        return reward, False, False, info
+        terminated = bool(self.terminate_on_hit and info["aim_error"] <= self.success_tolerance)
+        truncated = bool(self.max_episode_steps > 0 and self.elapsed_steps >= self.max_episode_steps)
+        return reward, terminated, truncated, info
 
     def step(self, action: np.ndarray) -> tuple[np.ndarray, float, bool, bool, dict[str, Any]]:
         reward, terminated, truncated, info = self.step_control(action)

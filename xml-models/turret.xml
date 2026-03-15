@@ -11,6 +11,42 @@
     <worldbody>
         <!-- 地面 -->
         <geom name="ground" type="plane" size="2 2 0.1" rgba="0.95 0.95 0.95 1"/>
+        <!-- 底座活动范围：slide_x in [-0.8, 0.15], slide_y in [-0.75, 0.75] -->
+        <geom name="base_motion_zone_fill"
+              type="box"
+              pos="-0.325 0 0.001"
+              size="0.475 0.75 0.001"
+              rgba="0.2 0.65 0.95 0.12"
+              contype="0"
+              conaffinity="0"/>
+        <geom name="base_motion_zone_top"
+              type="box"
+              pos="-0.325 0.75 0.003"
+              size="0.475 0.01 0.003"
+              rgba="0.15 0.45 0.85 0.95"
+              contype="0"
+              conaffinity="0"/>
+        <geom name="base_motion_zone_bottom"
+              type="box"
+              pos="-0.325 -0.75 0.003"
+              size="0.475 0.01 0.003"
+              rgba="0.15 0.45 0.85 0.95"
+              contype="0"
+              conaffinity="0"/>
+        <geom name="base_motion_zone_left"
+              type="box"
+              pos="-0.8 0 0.003"
+              size="0.01 0.75 0.003"
+              rgba="0.15 0.45 0.85 0.95"
+              contype="0"
+              conaffinity="0"/>
+        <geom name="base_motion_zone_right"
+              type="box"
+              pos="0.15 0 0.003"
+              size="0.01 0.75 0.003"
+              rgba="0.15 0.45 0.85 0.95"
+              contype="0"
+              conaffinity="0"/>
         <!-- 底座 -->
         <body name="base" pos="0 0 0.05">
             <inertial pos="0 0 0" mass="0.2" diaginertia="0.001 0.001 0.001"/>
