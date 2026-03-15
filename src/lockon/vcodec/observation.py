@@ -84,11 +84,15 @@ class RgbObservationEncoder(ObservationEncoder):
 
     def encode(self, frame_rgb: np.ndarray) -> tuple[gym_env_pb2.Tensor, dict[str, Any]]:
         frame = np.asarray(frame_rgb, dtype=np.uint8)
-        height, width = frame.shape[:2]
+        if frame.ndim not in (3, 4):
+            raise ValueError(f"rgb observation expects shape [H, W, C] or [N, H, W, C], got {frame.shape}")
+        height, width = frame.shape[-3:-1]
+        batch_size = int(frame.shape[0]) if frame.ndim == 4 else 1
         return tensor_from_array(frame), {
             "frame_codec": ObservationFormat.RGB.value,
             "width": int(width),
             "height": int(height),
+            "batch_size": batch_size,
         }
 
 
@@ -107,6 +111,8 @@ class JpegObservationEncoder(ObservationEncoder):
 
     def encode(self, frame_rgb: np.ndarray) -> tuple[gym_env_pb2.Tensor, dict[str, Any]]:
         frame = np.asarray(frame_rgb, dtype=np.uint8)
+        if frame.ndim != 3:
+            raise ValueError(f"jpeg observation expects shape [H, W, C], got {frame.shape}")
         height, width = frame.shape[:2]
         frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         ok, encoded = cv2.imencode(".jpg", frame_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), self.quality])
@@ -201,6 +207,8 @@ class H264ObservationEncoder(ObservationEncoder):
 
     def encode(self, frame_rgb: np.ndarray) -> tuple[gym_env_pb2.Tensor, dict[str, Any]]:
         frame = np.asarray(frame_rgb, dtype=np.uint8)
+        if frame.ndim != 3:
+            raise ValueError(f"h264 observation expects shape [H, W, C], got {frame.shape}")
         height, width = frame.shape[:2]
         self._ensure_codec(width, height)
 

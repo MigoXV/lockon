@@ -109,11 +109,21 @@ def turret_server(
     import mujoco.viewer
 
     try:
-        with mujoco.viewer.launch_passive(servicer.env.model, servicer.env.data) as viewer:
-            while viewer.is_running():
-                with servicer._lock:
-                    viewer.sync()
-                time.sleep(servicer.env.dt)
+        while True:
+            session = servicer.get_viewer_session()
+            if session is None or session.env is None:
+                time.sleep(0.1)
+                continue
+
+            with mujoco.viewer.launch_passive(session.env.model, session.env.data) as viewer:
+                while viewer.is_running():
+                    active_session = servicer.get_viewer_session()
+                    if active_session is not session:
+                        break
+                    with session.lock:
+                        viewer.sync()
+                    time.sleep(session.env.dt)
+            break
     finally:
         server.stop(grace=0)
         servicer.close()
