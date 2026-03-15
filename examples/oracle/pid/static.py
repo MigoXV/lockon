@@ -20,7 +20,7 @@ from lockon.vcodec import create_observation_decoder
 DEFAULT_SERVER_ADDR = os.getenv("LOCKON_SERVER_ADDR", "127.0.0.1:50051")
 FRAME_SKIP = 5
 CONTROL_DT = 0.01
-IDLE_ACTION = np.zeros(5, dtype=np.float32)
+IDLE_ACTION = np.zeros(6, dtype=np.float32)
 STREAM_END = object()
 
 def _request_iterator(
@@ -198,7 +198,7 @@ def main() -> None:
 
                 if should_fire:
                     fire_action = action.copy()
-                    fire_action[4] = 1.0
+                    fire_action[5] = 1.0
                     step_result = _send_step(request_queue, responses, fire_action)
                     last_info = step_result["info"]
                     frame_rgb, decoder = _decode_frame(step_result["observation"], last_info, decoder)
@@ -239,10 +239,11 @@ def main() -> None:
             cv2.destroyAllWindows()
 
     qpos = last_info.get("qpos", [])
-    if isinstance(qpos, list) and len(qpos) == 4:
+    if isinstance(qpos, list) and len(qpos) == 5:
         print(
             f"x={float(qpos[0]):.3f} y={float(qpos[1]):.3f} "
-            f"yaw={float(qpos[2]):.3f} pitch={float(qpos[3]):.3f}"
+            f"base_yaw={float(qpos[2]):.3f} turret_yaw={float(qpos[3]):.3f} "
+            f"pitch={float(qpos[4]):.3f}"
         )
 
 

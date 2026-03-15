@@ -19,6 +19,7 @@ from lockon.vcodec import create_observation_decoder
 DEFAULT_SERVER_ADDR = os.getenv("LOCKON_SERVER_ADDR", "127.0.0.1:50051")
 FRAME_SKIP = 5
 CONTROL_DT = 0.01
+# 6-D action = 5 control channels + 1 fire trigger.
 IDLE_ACTION = np.zeros(6, dtype=np.float32)
 STREAM_END = object()
 SCHEMATIC_TARGET_X = 0.5
