@@ -115,6 +115,22 @@ class TurretEnv(gym.Env[np.ndarray, np.ndarray]):
         self.tip_site_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, "tip")
         self.bullseye_site_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, "bullseye_center")
         self.cam_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, self.camera_name)
+        yaw_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "yaw_joint")
+        pitch_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "pitch_joint")
+        self.turret_motor_qpos_indices = np.asarray(
+            [
+                int(self.model.jnt_qposadr[yaw_joint_id]),
+                int(self.model.jnt_qposadr[pitch_joint_id]),
+            ],
+            dtype=np.int32,
+        )
+        self.turret_motor_qvel_indices = np.asarray(
+            [
+                int(self.model.jnt_dofadr[yaw_joint_id]),
+                int(self.model.jnt_dofadr[pitch_joint_id]),
+            ],
+            dtype=np.int32,
+        )
 
         if camera_fovy_deg is not None:
             self.model.cam_fovy[self.cam_id] = float(camera_fovy_deg)
@@ -209,6 +225,8 @@ class TurretEnv(gym.Env[np.ndarray, np.ndarray]):
             "qpos": self.data.qpos[: self.qpos_size].astype(np.float32).copy(),
             "qvel": self.data.qvel[: self.qvel_size].astype(np.float32).copy(),
             "targets": self.targets.astype(np.float32).copy(),
+            "turret_motor_angles": self.data.qpos[self.turret_motor_qpos_indices].astype(np.float32).copy(),
+            "turret_motor_velocities": self.data.qvel[self.turret_motor_qvel_indices].astype(np.float32).copy(),
             "aim_error": self._aim_error(),
             "camera_fovy_deg": float(np.degrees(self.camera_fovy_rad)),
             "camera_fovx_deg": float(np.degrees(self.camera_fovx_rad)),
