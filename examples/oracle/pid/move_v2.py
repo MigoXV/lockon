@@ -11,6 +11,10 @@ import grpc
 import numpy as np
 from google.protobuf.json_format import MessageToDict
 
+import dotenv
+
+dotenv.load_dotenv()
+
 from lockon.aim.contorllers import PidAimConfig, PidAimController
 from lockon.protos.gym_v2 import gym_env_pb2, gym_env_pb2_grpc
 from lockon.vcodec import create_observation_decoder
@@ -28,7 +32,9 @@ SCHEMATIC_WORLD_Y = (-1.0, 1.0)
 
 def _tensor_from_array(array: np.ndarray) -> gym_env_pb2.Tensor:
     arr = np.asarray(array)
-    return gym_env_pb2.Tensor(data=arr.tobytes(), shape=list(arr.shape), dtype=str(arr.dtype))
+    return gym_env_pb2.Tensor(
+        data=arr.tobytes(), shape=list(arr.shape), dtype=str(arr.dtype)
+    )
 
 
 def _request_iterator(
@@ -41,7 +47,9 @@ def _request_iterator(
         yield item
 
 
-def _extract_observation_tensor(observation: gym_env_pb2.TensorValue) -> gym_env_pb2.Tensor:
+def _extract_observation_tensor(
+    observation: gym_env_pb2.TensorValue,
+) -> gym_env_pb2.Tensor:
     if observation.WhichOneof("kind") != "tensor":
         raise RuntimeError("pid move v2 demo expects tensor observation")
     return observation.tensor
@@ -55,7 +63,9 @@ def _send_step(
     request_queue.put(
         gym_env_pb2.EnvRequest(
             step=gym_env_pb2.Step(
-                action=gym_env_pb2.TensorValue(tensor=_tensor_from_array(action.astype(np.float32)))
+                action=gym_env_pb2.TensorValue(
+                    tensor=_tensor_from_array(action.astype(np.float32))
+                )
             )
         )
     )
@@ -64,7 +74,11 @@ def _send_step(
         raise RuntimeError("expected StepReply")
 
     info = MessageToDict(reply.step.info, preserving_proto_field_name=True)
-    if len(reply.step.reward) != 1 or len(reply.step.terminated) != 1 or len(reply.step.truncated) != 1:
+    if (
+        len(reply.step.reward) != 1
+        or len(reply.step.terminated) != 1
+        or len(reply.step.truncated) != 1
+    ):
         raise RuntimeError("pid move v2 demo expects single-env repeated scalars")
     return {
         "observation": _extract_observation_tensor(reply.step.observation),
@@ -96,18 +110,24 @@ def _format_aim_error(info: dict[str, object]) -> str:
     return f"{float(value):.5f}"
 
 
-def _sample_move_action(rng: np.random.Generator, move_scale: float, move_deadband: float) -> np.ndarray:
+def _sample_move_action(
+    rng: np.random.Generator, move_scale: float, move_deadband: float
+) -> np.ndarray:
     move = rng.uniform(-move_scale, move_scale, size=2).astype(np.float32)
     move[np.abs(move) < move_deadband] = 0.0
     return move
 
 
-def _slew_move_action(current_move: np.ndarray, target_move: np.ndarray, max_delta: float) -> np.ndarray:
+def _slew_move_action(
+    current_move: np.ndarray, target_move: np.ndarray, max_delta: float
+) -> np.ndarray:
     delta = np.clip(target_move - current_move, -max_delta, max_delta)
     return (current_move + delta).astype(np.float32)
 
 
-def _sample_base_rot_action(rng: np.random.Generator, rot_scale: float, rot_deadband: float) -> float:
+def _sample_base_rot_action(
+    rng: np.random.Generator, rot_scale: float, rot_deadband: float
+) -> float:
     rot = float(rng.uniform(-rot_scale, rot_scale))
     if abs(rot) < rot_deadband:
         return 0.0
@@ -115,7 +135,9 @@ def _sample_base_rot_action(rng: np.random.Generator, rot_scale: float, rot_dead
 
 
 def _slew_scalar(current_value: float, target_value: float, max_delta: float) -> float:
-    return float(current_value + np.clip(target_value - current_value, -max_delta, max_delta))
+    return float(
+        current_value + np.clip(target_value - current_value, -max_delta, max_delta)
+    )
 
 
 def _world_to_panel(
@@ -132,14 +154,38 @@ def _world_to_panel(
     return int(px), int(py)
 
 
-def _render_schematic(info: dict[str, object], frame_height: int, panel_width: int = 320) -> np.ndarray:
+def _render_schematic(
+    info: dict[str, object], frame_height: int, panel_width: int = 320
+) -> np.ndarray:
     panel = np.full((frame_height, panel_width, 3), 248, dtype=np.uint8)
-    cv2.rectangle(panel, (0, 0), (panel_width - 1, frame_height - 1), (210, 210, 210), 1)
-    cv2.putText(panel, "Top View", (16, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (40, 40, 40), 2, cv2.LINE_AA)
+    cv2.rectangle(
+        panel, (0, 0), (panel_width - 1, frame_height - 1), (210, 210, 210), 1
+    )
+    cv2.putText(
+        panel,
+        "Top View",
+        (16, 28),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (40, 40, 40),
+        2,
+        cv2.LINE_AA,
+    )
 
-    tx, ty = _world_to_panel(SCHEMATIC_TARGET_X, SCHEMATIC_TARGET_Y, panel_width, frame_height)
+    tx, ty = _world_to_panel(
+        SCHEMATIC_TARGET_X, SCHEMATIC_TARGET_Y, panel_width, frame_height
+    )
     cv2.circle(panel, (tx, ty), 7, (30, 30, 220), -1)
-    cv2.putText(panel, "target", (tx + 10, ty - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (30, 30, 220), 1, cv2.LINE_AA)
+    cv2.putText(
+        panel,
+        "target",
+        (tx + 10, ty - 8),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.55,
+        (30, 30, 220),
+        1,
+        cv2.LINE_AA,
+    )
 
     qpos = info.get("qpos", [])
     if isinstance(qpos, list) and len(qpos) == 5:
@@ -152,7 +198,16 @@ def _render_schematic(info: dict[str, object], frame_height: int, panel_width: i
 
         bx, by = _world_to_panel(base_x, base_y, panel_width, frame_height)
         cv2.circle(panel, (bx, by), 6, (30, 160, 30), -1)
-        cv2.putText(panel, "turret", (bx + 10, by - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (30, 160, 30), 1, cv2.LINE_AA)
+        cv2.putText(
+            panel,
+            "turret",
+            (bx + 10, by - 8),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (30, 160, 30),
+            1,
+            cv2.LINE_AA,
+        )
 
         dir_len = 0.28
         dx = dir_len * np.cos(facing_yaw)
@@ -162,9 +217,36 @@ def _render_schematic(info: dict[str, object], frame_height: int, panel_width: i
         cv2.circle(panel, (ex, ey), 4, (20, 120, 20), -1)
 
         cv2.line(panel, (bx, by), (tx, ty), (160, 160, 160), 1)
-        cv2.putText(panel, f"base=({base_x:.2f}, {base_y:.2f})", (16, frame_height - 76), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (50, 50, 50), 1, cv2.LINE_AA)
-        cv2.putText(panel, f"base_yaw={base_yaw:.2f} gun_yaw={turret_yaw:.2f}", (16, frame_height - 48), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (50, 50, 50), 1, cv2.LINE_AA)
-        cv2.putText(panel, f"facing={facing_yaw:.2f} pitch={pitch:.2f}", (16, frame_height - 28), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (50, 50, 50), 1, cv2.LINE_AA)
+        cv2.putText(
+            panel,
+            f"base=({base_x:.2f}, {base_y:.2f})",
+            (16, frame_height - 76),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (50, 50, 50),
+            1,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            panel,
+            f"base_yaw={base_yaw:.2f} gun_yaw={turret_yaw:.2f}",
+            (16, frame_height - 48),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (50, 50, 50),
+            1,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            panel,
+            f"facing={facing_yaw:.2f} pitch={pitch:.2f}",
+            (16, frame_height - 28),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (50, 50, 50),
+            1,
+            cv2.LINE_AA,
+        )
 
     return panel
 
@@ -219,7 +301,16 @@ def _draw_overlay(
         ]
 
     for idx, line in enumerate(lines):
-        cv2.putText(frame, line, (12, 24 + idx * 22), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
+        cv2.putText(
+            frame,
+            line,
+            (12, 24 + idx * 22),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (255, 255, 255),
+            1,
+            cv2.LINE_AA,
+        )
 
 
 def main() -> None:
@@ -289,23 +380,39 @@ def main() -> None:
         if reset_reply.WhichOneof("result") != "reset":
             raise RuntimeError("expected ResetReply")
 
-        reset_info = MessageToDict(reset_reply.reset.info, preserving_proto_field_name=True)
-        frame_rgb, decoder = _decode_frame(_extract_observation_tensor(reset_reply.reset.observation), reset_info, decoder)
+        reset_info = MessageToDict(
+            reset_reply.reset.info, preserving_proto_field_name=True
+        )
+        frame_rgb, decoder = _decode_frame(
+            _extract_observation_tensor(reset_reply.reset.observation),
+            reset_info,
+            decoder,
+        )
         cv2.namedWindow("Oracle PID Move Aim V2", cv2.WINDOW_NORMAL)
         action = IDLE_ACTION.copy()
 
         try:
             for step_idx in range(args.max_steps):
                 if step_idx % max(args.move_hold_steps, 1) == 0:
-                    target_move_xy = _sample_move_action(rng, args.move_scale, args.move_deadband)
+                    target_move_xy = _sample_move_action(
+                        rng, args.move_scale, args.move_deadband
+                    )
                 if step_idx % max(args.base_rot_hold_steps, 1) == 0:
-                    target_base_rot = _sample_base_rot_action(rng, args.base_rot_scale, args.base_rot_deadband)
-                move_xy = _slew_move_action(move_xy, target_move_xy, args.move_slew_rate)
-                base_rot = _slew_scalar(base_rot, target_base_rot, args.base_rot_slew_rate)
+                    target_base_rot = _sample_base_rot_action(
+                        rng, args.base_rot_scale, args.base_rot_deadband
+                    )
+                move_xy = _slew_move_action(
+                    move_xy, target_move_xy, args.move_slew_rate
+                )
+                base_rot = _slew_scalar(
+                    base_rot, target_base_rot, args.base_rot_slew_rate
+                )
 
                 step_result = _send_step(request_queue, responses, action)
                 last_info = step_result["info"]
-                frame_rgb, decoder = _decode_frame(step_result["observation"], last_info, decoder)
+                frame_rgb, decoder = _decode_frame(
+                    step_result["observation"], last_info, decoder
+                )
 
                 computed = controller.update(last_info, frame_rgb.shape, dt=CONTROL_DT)
                 action = IDLE_ACTION.copy()
@@ -332,11 +439,14 @@ def main() -> None:
                 if last_metrics is not None:
                     aligned = (
                         abs(last_metrics["azimuth_deg"]) <= args.align_threshold_deg
-                        and abs(last_metrics["elevation_deg"]) <= args.align_threshold_deg
+                        and abs(last_metrics["elevation_deg"])
+                        <= args.align_threshold_deg
                         and abs(last_metrics["plane_x"]) <= args.plane_threshold
                         and abs(last_metrics["plane_y"]) <= args.plane_threshold
                     )
-                    should_fire = args.fire_when_aligned and aligned and not aligned_last_step
+                    should_fire = (
+                        args.fire_when_aligned and aligned and not aligned_last_step
+                    )
                     aligned_last_step = aligned
                 else:
                     aligned_last_step = False
@@ -346,7 +456,9 @@ def main() -> None:
                     fire_action[5] = 1.0
                     step_result = _send_step(request_queue, responses, fire_action)
                     last_info = step_result["info"]
-                    frame_rgb, decoder = _decode_frame(step_result["observation"], last_info, decoder)
+                    frame_rgb, decoder = _decode_frame(
+                        step_result["observation"], last_info, decoder
+                    )
                     fire_info = last_info.get("fire", {})
                     if isinstance(fire_info, dict):
                         if fire_info.get("hit"):
@@ -363,8 +475,18 @@ def main() -> None:
 
                 if step_idx % FRAME_SKIP == 0:
                     frame = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
-                    _draw_overlay(frame, last_info, last_metrics, move_xy, base_rot, mode, scan_yaw)
-                    display = np.concatenate([frame, _render_schematic(last_info, frame.shape[0])], axis=1)
+                    _draw_overlay(
+                        frame,
+                        last_info,
+                        last_metrics,
+                        move_xy,
+                        base_rot,
+                        mode,
+                        scan_yaw,
+                    )
+                    display = np.concatenate(
+                        [frame, _render_schematic(last_info, frame.shape[0])], axis=1
+                    )
                     cv2.imshow("Oracle PID Move Aim V2", display)
                     key = cv2.waitKey(1)
                     if (key & 0xFF) == 27:
