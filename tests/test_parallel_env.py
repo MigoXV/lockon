@@ -149,7 +149,7 @@ class TurretGrpcSessionTests(unittest.TestCase):
             servicer.close()
 
     def test_reset_seed_dimension_controls_batch_size(self) -> None:
-        servicer = create_servicer(camera_width=64, camera_height=48, observation_format="rgb")
+        servicer = create_servicer(camera_width=64, camera_height=48)
         context = _FakeContext()
         batch_action = tensor_from_array(np.zeros((4, 6), dtype=np.float32))
         requests = iter(
