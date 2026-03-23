@@ -96,7 +96,7 @@ class TurretGymV2ServicerTests(unittest.TestCase):
             servicer.close()
 
     def test_batch_reset_options_and_step_return_batched_motor_vectors(self) -> None:
-        servicer = create_servicer(camera_width=64, camera_height=48, observation_format="rgb")
+        servicer = create_servicer(camera_width=64, camera_height=48)
         context = _FakeContext()
         action = gym_env_pb2.TensorValue(tensor=_tensor(np.zeros((2, 6), dtype=np.float32)))
         requests = iter(

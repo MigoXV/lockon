@@ -7,7 +7,6 @@ import typer
 
 from lockon.protos.gym_env import gym_env_pb2_grpc
 from lockon.protos.gym_v2 import gym_env_pb2_grpc as gym_v2_pb2_grpc
-from lockon.vcodec import ObservationFormat
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -44,30 +43,6 @@ def turret_server(
         envvar="LOCKON_TURRET_CAMERA_FOVY",
         help="Rendered camera vertical field of view in degrees.",
     ),
-    observation_format: ObservationFormat = typer.Option(
-        ObservationFormat.RGB,
-        "--observation-format",
-        envvar="LOCKON_TURRET_OBSERVATION_FORMAT",
-        help="Observation transport format: rgb, jpeg, or h264.",
-    ),
-    jpeg_quality: int = typer.Option(
-        80,
-        "--jpeg-quality",
-        envvar="LOCKON_TURRET_JPEG_QUALITY",
-        help="JPEG quality used when observation format is jpeg.",
-    ),
-    h264_bitrate_kbps: int = typer.Option(
-        4000,
-        "--h264-bitrate-kbps",
-        envvar="LOCKON_TURRET_H264_BITRATE_KBPS",
-        help="Target H.264 bitrate in kbps.",
-    ),
-    h264_gop: int = typer.Option(
-        30,
-        "--h264-gop",
-        envvar="LOCKON_TURRET_H264_GOP",
-        help="H.264 GOP/keyframe interval in frames.",
-    ),
     show_mujoco_viewer: bool = typer.Option(
         False,
         "--show-mujoco-viewer",
@@ -82,19 +57,11 @@ def turret_server(
         camera_width=camera_width,
         camera_height=camera_height,
         camera_fovy_deg=camera_fovy,
-        observation_format=observation_format.value,
-        jpeg_quality=jpeg_quality,
-        h264_bitrate_kbps=h264_bitrate_kbps,
-        h264_gop=h264_gop,
     )
     servicer_v2 = create_v2_servicer(
         camera_width=camera_width,
         camera_height=camera_height,
         camera_fovy_deg=camera_fovy,
-        observation_format=observation_format.value,
-        jpeg_quality=jpeg_quality,
-        h264_bitrate_kbps=h264_bitrate_kbps,
-        h264_gop=h264_gop,
     )
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
     gym_env_pb2_grpc.add_ArmEnvServicer_to_server(servicer, server)
@@ -103,7 +70,7 @@ def turret_server(
     server.start()
     typer.echo(
         f"Turret gRPC server listening on {host}:{port} with GymEnv v1 and GymEnv v2 "
-        f"({observation_format.value}, {camera_width}x{camera_height}, fovy={camera_fovy})"
+        f"(rgb, {camera_width}x{camera_height}, fovy={camera_fovy})"
     )
     if not show_mujoco_viewer:
         try:

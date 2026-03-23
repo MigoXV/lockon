@@ -17,8 +17,7 @@ from lockon.servicers.turret.utils import (
     info_to_struct,
     scalar_tensor,
 )
-from lockon.utils import tensor_from_array
-from lockon.vcodec import ObservationCodecConfig, ObservationFormat, create_observation_encoder
+from lockon.utils import create_observation_encoder, tensor_from_array
 
 
 @dataclass(slots=True)
@@ -48,20 +47,10 @@ class _SessionState:
 class TurretGymServicer(gym_env_pb2_grpc.ArmEnvServicer):
     def __init__(
         self,
-        observation_format: str = "rgb",
-        jpeg_quality: int = 80,
-        h264_bitrate_kbps: int = 4000,
-        h264_gop: int = 30,
         camera_width: int = 640,
         camera_height: int = 480,
         camera_fovy_deg: float | None = None,
     ) -> None:
-        self.codec_config = ObservationCodecConfig(
-            observation_format=ObservationFormat.from_value(observation_format),
-            jpeg_quality=jpeg_quality,
-            h264_bitrate_kbps=h264_bitrate_kbps,
-            h264_gop=h264_gop,
-        )
         self.camera_width = camera_width
         self.camera_height = camera_height
         self.camera_fovy_deg = camera_fovy_deg
@@ -80,12 +69,7 @@ class TurretGymServicer(gym_env_pb2_grpc.ArmEnvServicer):
         session = _SessionState(
             session_id=self._next_session_id,
             envs=[],
-            encoder=create_observation_encoder(
-                self.codec_config.observation_format,
-                jpeg_quality=self.codec_config.jpeg_quality,
-                h264_bitrate_kbps=self.codec_config.h264_bitrate_kbps,
-                h264_gop=self.codec_config.h264_gop,
-            ),
+            encoder=create_observation_encoder(),
             lock=RLock(),
         )
         with self._sessions_lock:
@@ -114,8 +98,6 @@ class TurretGymServicer(gym_env_pb2_grpc.ArmEnvServicer):
         frames = [env.render() for env in session.envs]
         if len(frames) == 1:
             return session.encoder.encode(frames[0])
-        if self.codec_config.observation_format is not ObservationFormat.RGB:
-            raise RuntimeError("batched sessions require rgb observation format")
         return session.encoder.encode(np.stack(frames, axis=0))
 
     def _release_session(self, session: _SessionState) -> None:
@@ -145,11 +127,6 @@ class TurretGymServicer(gym_env_pb2_grpc.ArmEnvServicer):
                 if cmd == "reset":
                     seed_values = list(request.reset.seed)
                     env_count = len(seed_values) if seed_values else 1
-                    if env_count > 1 and self.codec_config.observation_format is not ObservationFormat.RGB:
-                        context.abort(
-                            grpc.StatusCode.INVALID_ARGUMENT,
-                            "batched sessions require rgb observation format",
-                        )
 
                     seeds: list[int | None] = [int(seed) for seed in seed_values] if seed_values else [None]
                     with session.lock:
@@ -255,19 +232,11 @@ def create_servicer(
     camera_width: int = 640,
     camera_height: int = 480,
     camera_fovy_deg: float | None = None,
-    observation_format: str = "rgb",
-    jpeg_quality: int = 80,
-    h264_bitrate_kbps: int = 4000,
-    h264_gop: int = 30,
 ) -> TurretGymServicer:
     return TurretGymServicer(
         camera_width=camera_width,
         camera_height=camera_height,
         camera_fovy_deg=camera_fovy_deg,
-        observation_format=observation_format,
-        jpeg_quality=jpeg_quality,
-        h264_bitrate_kbps=h264_bitrate_kbps,
-        h264_gop=h264_gop,
     )
 
 
@@ -278,10 +247,6 @@ def serve(
     camera_width: int = 640,
     camera_height: int = 480,
     camera_fovy_deg: float | None = None,
-    observation_format: str = "rgb",
-    jpeg_quality: int = 80,
-    h264_bitrate_kbps: int = 4000,
-    h264_gop: int = 30,
     servicer: TurretGymServicer | None = None,
 ) -> grpc.Server:
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
@@ -289,10 +254,6 @@ def serve(
         camera_width=camera_width,
         camera_height=camera_height,
         camera_fovy_deg=camera_fovy_deg,
-        observation_format=observation_format,
-        jpeg_quality=jpeg_quality,
-        h264_bitrate_kbps=h264_bitrate_kbps,
-        h264_gop=h264_gop,
     )
     gym_env_pb2_grpc.add_ArmEnvServicer_to_server(
         turret_servicer,

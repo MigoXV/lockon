@@ -13,7 +13,7 @@ from google.protobuf.json_format import MessageToDict
 
 from lockon.aim.contorllers import PidAimConfig, PidAimController
 from lockon.protos.gym_v2 import gym_env_pb2, gym_env_pb2_grpc
-from lockon.vcodec import create_observation_decoder
+from lockon.utils import create_observation_decoder
 
 DEFAULT_SERVER_ADDR = os.getenv("LOCKON_SERVER_ADDR", "127.0.0.1:50051")
 FRAME_SKIP = 5
